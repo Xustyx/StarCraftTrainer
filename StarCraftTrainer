@@ -1,0 +1,124 @@
+from memorpy import *
+from threading import Timer
+
+game_status_spec    =   {   "address"   :   0x0057F0F0,
+                            "offset"    :   0x00,
+                            "base"      :   "static",
+                            "type"      :   "list",
+                            "total"     :   12,
+                            "next"      :   0x04,
+                            "name"      :   "Stats",
+                            "attributes":   [
+                                                {   "name"  :   "Mineral",
+                                                    "offset":   0x00,
+                                                    "type"  :   "uint"
+                                                },
+                                                {   "name"  :   "Gas",
+                                                    "offset":   0x30,
+                                                    "type"  :   "uint"
+                                                },
+                                                {   "name"  :   "Total Mineral",
+                                                    "offset":   0x90,
+                                                    "type"  :   "uint"
+                                                },
+                                                {   "name"  :   "Total Gas",
+                                                    "offset":   0x60,
+                                                    "type"  :   "uint"
+                                                },
+                                            ]
+                        }
+player_spec         =   {   "address"   :   0x0059B3D8,
+                            "offset"    :   0x00,
+                            "base"      :   "static",
+                            "type"      :   "list",
+                            "total"     :   12,
+                            "next"      :   0x48,
+                            "name"      :   "Player",
+                            "attributes":   [
+                                                {   "name"  :   "Name",
+                                                    "offset":   0x00,
+                                                    "type"  :   "string"
+                                                },
+                                                {   "name"  :   "Id",
+                                                    "offset":   0x38,
+                                                    "type"  :   "uint"
+                                                },
+                                                {   "name"  :   "Type",
+                                                    "offset":   0x40,
+                                                    "type"  :   "uint"
+                                                },
+                                                {   "name"  :   "Race",
+                                                    "offset":   0x44,
+                                                    "type"  :   "uint"
+                                                }
+                                            ]
+                        }
+
+class StarCraftTrainer:
+    def __init__(self, pid):
+        self.listeners = []
+        self.memory_worker = MemWorker(pid)
+        self.addresses = {}
+        self.pointers = []
+        self.pointers.append(game_status_spec)
+        self.loop()
+
+    def read_pointer_spec(self, pointer):
+        address = pointer['address'] +  pointer['offset']
+        #type = pointer['type']
+        attributes = pointer['attributes']
+        list = self.read_pointer_list(address, pointer['next'], pointer['total'], attributes)
+
+    def read_pointer_list(self, start, next, total, attributes):
+        list = []
+        for index in range(total):
+            address = start + (index * next)
+            value = self.read_attribute_list(address, attributes)
+            list.append(value)
+        return list
+
+    def read_attribute_list(self, start, attributes):
+        list = []
+        for index in range(len(attributes)):
+            value = {}
+            address = start + attributes[index]['offset']
+            type = attributes[index]['type']
+            value['name'] = attributes[index]['name']
+            value['value'] = self.read_address(address,type)
+            list.append(value)
+        return list
+
+    def read_address(self, address, type):
+        value = self.memory_worker.Address(address,type).read()
+        if address in self.addresses:
+            if self.addresses[address] != value:
+                self.addresses[address] = value
+                event = address, " => ", value
+                self.notify_listeners(event)
+        else:
+            self.addresses[address] = value
+            event = address, " => ", value
+            self.notify_listeners(event)
+        return value
+
+    def loop(self):
+        self.read_pointer_spec(game_status_spec)
+        Timer(5, self.loop).start()
+
+    '''This methods are for observers'''
+    def register(self, listener):
+        self.listeners.append(listener)
+
+    def unregister(self, listener):
+        self.listeners.remove(listener)
+
+    def notify_listeners(self, event):
+        print event
+        for listener in self.listeners:
+            listener.notify(event)
+
+def main():
+    sct = StarCraftTrainer(5268)
+
+if __name__ == '__main__':
+    main()
